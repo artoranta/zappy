@@ -130,8 +130,14 @@ export default {
                 }
                 if (this.index > 10) {
                     this.state = 0
+                } else {
+                    const newSpeed = this.speed + (this.score / (100 * ((this.score || 1) / 2)))
+                    if (newSpeed !== this.speed) {
+                        clearInterval(this.interval)
+                        this.speed = newSpeed
+                        this.game()
+                    }
                 }
-                this.speed++
             }, 1500 / this.speed)
         },
         restart () {
