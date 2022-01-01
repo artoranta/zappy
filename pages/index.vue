@@ -295,7 +295,7 @@ export default {
             }
             xhr.send()
         },
-        getHighscore () {
+        getHighscore (cb) {
             const xhr = new XMLHttpRequest()
             const key = 'highscore'
             xhr.open('GET', `https://api.countapi.xyz/get/${namespace}/${key}`)
@@ -306,28 +306,33 @@ export default {
                 if (!this.storage[key] && this.storage[key] !== 0) {
                     this.create(key)
                 }
+                if (cb) {
+                    cb()
+                }
             }
             xhr.send()
             this.getName(key)
         },
         saveScore (score) {
-            const key = 'highscore'
-            const currentValue = this.storage[key] || 0
-            let name
-            if (score >= currentValue) {
-                name = prompt('Please enter your name', '')
-            }
-            if (score >= currentValue) {
-                const xhr = new XMLHttpRequest()
-                xhr.open('GET', `https://api.countapi.xyz/set/${namespace}/${key}?value=${score}`)
-                xhr.responseType = 'json'
-                xhr.onload = ({ target }) => {
-                    const value = Object.hasOwnProperty.call(target.response, 'value') ? target.response.value : 0
-                    this.$set(this.storage, key, value)
+            this.getHighscore(() => {
+                const key = 'highscore'
+                const currentValue = this.storage[key] || 0
+                let name
+                if (score >= currentValue) {
+                    name = prompt('Please enter your name', '')
                 }
-                xhr.send()
-                this.saveName(key, name)
-            }
+                if (score >= currentValue) {
+                    const xhr = new XMLHttpRequest()
+                    xhr.open('GET', `https://api.countapi.xyz/set/${namespace}/${key}?value=${score}`)
+                    xhr.responseType = 'json'
+                    xhr.onload = ({ target }) => {
+                        const value = Object.hasOwnProperty.call(target.response, 'value') ? target.response.value : 0
+                        this.$set(this.storage, key, value)
+                    }
+                    xhr.send()
+                    this.saveName(key, name)
+                }
+            })
         },
         count (key, endpoint = 'hit') {
             const xhr = new XMLHttpRequest()
