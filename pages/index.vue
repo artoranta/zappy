@@ -1,5 +1,20 @@
 <template>
     <div class="grid-container" @mouseup="handleClick({ keyCode: null }, true)">
+        <div class="stat-header">
+            <div class="game-count">
+                Visits: {{ storage.visits ? storage.visits : 0 }}<br>
+                Games: {{ storage.games ? storage.games : 0 }}
+            </div>
+            <div>
+                <div>
+                    <b>Highscore</b>
+                </div>
+                <div style="text-align: right;">
+                    {{ ((storage['highscore-name'] || '') || '_ _ _ _ _ ') + ':' }}
+                    {{ storage['highscore'] || 0 }}
+                </div>
+            </div>
+        </div>
         <div class="game-header">
             <a-button :type="state === 0 ? 'primary' : 'default'" class="reset-button" @click="state === 0 ? start() : restart()">
                 {{ state !== 2 ? (state === 0 ? 'Start' : 'Reset') : 'New Game' }}
@@ -45,6 +60,8 @@
 </template>
 
 <script>
+const namespace = 'zappy.ninja'
+
 export default {
     layout: 'default',
     data () {
@@ -58,6 +75,7 @@ export default {
             last: 90,
             index: null,
             buffer: [],
+            storage: {},
             buttons: [
                 {
                     keyCode: 90,
@@ -84,6 +102,11 @@ export default {
         }
     },
     watch: {
+        state (value) {
+            if (value === 1) {
+                this.count('games')
+            }
+        }
     },
     mounted () {
         this.focusInput()
@@ -93,7 +116,10 @@ export default {
     },
     created () {
         this.$nextTick(() => {
+            this.count('games', 'get')
+            this.count('visits')
             this.updateCanvas()
+            this.getHighscore()
         })
     },
     methods: {
@@ -130,6 +156,7 @@ export default {
                 }
                 if (this.index > 10) {
                     this.state = 0
+                    this.saveScore(this.score)
                 } else {
                     const newSpeed = this.speed + (this.score / (100 * ((this.score || 1) / 2)))
                     if (newSpeed !== this.speed) {
@@ -172,6 +199,7 @@ export default {
                     this.index--
                 } else {
                     this.state = 0
+                    this.saveScore(this.score)
                 }
             }
         },
@@ -209,6 +237,107 @@ export default {
         },
         lightenDarkenColor (color, amount) {
             return this.hexToRgb('#' + color.replace(/^#/, '').replace(/../g, color => ('0' + Math.min(255, Math.max(0, parseInt(color, 16) + amount)).toString(16)).substr(-2)))
+        },
+        create (key, value = 0) {
+            const xhr = new XMLHttpRequest()
+            xhr.open('GET', `https://api.countapi.xyz/create?namespace=${namespace}&key=${key}&value=${value}&enable_reset=1`)
+            xhr.responseType = 'json'
+            xhr.onload = ({ target }) => {
+                console.log(target.response)
+            }
+            xhr.send()
+        },
+        saveName (prefix, name = '') {
+            const xhr = new XMLHttpRequest()
+            const key = `${prefix}-name`
+            let hexValue = Buffer.from((name || '').slice(0, 1)).toString('hex')
+            let intValue = BigInt('0x' + hexValue)
+            let length = 1
+            let result
+            while (true) {
+                length++
+                hexValue = Buffer.from((name || '').slice(0, length)).toString('hex')
+                intValue = BigInt('0x' + hexValue)
+                if (intValue <= 99999999999999 && length < 10) {
+                    result = intValue.toString()
+                } else {
+                    break
+                }
+            }
+            xhr.open('GET', `https://api.countapi.xyz/set/${namespace}/${key}?value=${result}`)
+            xhr.responseType = 'json'
+            xhr.onload = ({ target }) => {
+                const value = Object.hasOwnProperty.call(target.response, 'value') ? target.response.value : 0
+                const hexValue = (value || '').toString(16)
+                this.$set(this.storage, key, Buffer.from(hexValue, 'hex').toString())
+            }
+            xhr.send()
+        },
+        getName (prefix) {
+            const xhr = new XMLHttpRequest()
+            const key = `${prefix}-name`
+            xhr.open('GET', `https://api.countapi.xyz/get/${namespace}/${key}`)
+            xhr.responseType = 'json'
+            xhr.onload = ({ target }) => {
+                const value = Object.hasOwnProperty.call(target.response, 'value') ? target.response.value : 0
+                let hexValue = ''
+                let result = null
+                if (value) {
+                    hexValue = BigInt(value).toString(16)
+                    result = Buffer.from(hexValue, 'hex').toString()
+                } else if (value === 0) {
+                    result = 0
+                }
+                this.$set(this.storage, key, result)
+                if (!this.storage[key] && this.storage[key] !== 0) {
+                    this.create(key)
+                }
+            }
+            xhr.send()
+        },
+        getHighscore () {
+            const xhr = new XMLHttpRequest()
+            const key = 'highscore'
+            xhr.open('GET', `https://api.countapi.xyz/get/${namespace}/${key}`)
+            xhr.responseType = 'json'
+            xhr.onload = ({ target }) => {
+                const value = Object.hasOwnProperty.call(target.response, 'value') ? target.response.value : 0
+                this.$set(this.storage, key, value)
+                if (!this.storage[key] && this.storage[key] !== 0) {
+                    this.create(key)
+                }
+            }
+            xhr.send()
+            this.getName(key)
+        },
+        saveScore (score) {
+            const key = 'highscore'
+            const currentValue = this.storage[key] || 0
+            let name
+            if (score >= currentValue) {
+                name = prompt('Please enter your name', '')
+            }
+            if (score >= currentValue) {
+                const xhr = new XMLHttpRequest()
+                xhr.open('GET', `https://api.countapi.xyz/set/${namespace}/${key}?value=${score}`)
+                xhr.responseType = 'json'
+                xhr.onload = ({ target }) => {
+                    const value = Object.hasOwnProperty.call(target.response, 'value') ? target.response.value : 0
+                    this.$set(this.storage, key, value)
+                }
+                xhr.send()
+                this.saveName(key, name)
+            }
+        },
+        count (key, endpoint = 'hit') {
+            const xhr = new XMLHttpRequest()
+            xhr.open('GET', `https://api.countapi.xyz/${endpoint}/${namespace}/${key}`)
+            xhr.responseType = 'json'
+            xhr.onload = ({ target }) => {
+                const value = Object.hasOwnProperty.call(target.response, 'value') ? target.response.value : 0
+                this.$set(this.storage, key, value)
+            }
+            xhr.send()
         }
     }
 }
@@ -223,6 +352,16 @@ export default {
         flex-direction: column;
         min-height: 100vh;
         background: #2b2b2b;
+    }
+
+    .stat-header {
+        width: 360px;
+        color: #88adc2;
+        justify-content: space-between;
+        align-items: center;
+        display: flex;
+        flex-direction: row;
+        margin-bottom: 10px;
     }
 
     .game-header {
