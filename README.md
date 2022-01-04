@@ -1,5 +1,7 @@
 # zappy
 
+Hosted at [Zappy](https://zappy.ninja)
+
 ## Build Setup
 
 ```bash
